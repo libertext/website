@@ -8,6 +8,7 @@ from pathlib import Path
 import streamlit as st
 
 from agent.core import MakaleTalebi, calistir, kaydet
+from agent.trends_planner import planla
 
 
 ADIM_ETIKETLERI = {
@@ -28,57 +29,26 @@ st.set_page_config(
 )
 
 st.title("SEO Uyumlu Türkçe Makale Üretim Agent'ı")
-st.caption("Claude API ile çok-aşamalı SEO makale üretimi")
-
-with st.sidebar:
-    st.header("Makale Parametreleri")
-    konu = st.text_input("Konu", placeholder="Örn: Yapay zeka ile içerik üretimi")
-    ana_keyword = st.text_input("Ana anahtar kelime", placeholder="Örn: yapay zeka içerik")
-    hedef_kitle = st.text_input("Hedef kitle", value="genel okuyucular")
-    ton = st.selectbox(
-        "Ton",
-        ["profesyonel ama anlaşılır", "samimi ve sohbet havasında", "eğitici ve detaylı", "kısa ve teknik"],
-    )
-    hedef_uzunluk = st.slider("Hedef kelime sayısı", 500, 4000, 1500, step=250)
-    yazar = st.text_input("Yazar adı", value="Editör")
-    site_url = st.text_input("Site URL", value="https://example.com")
-    uretmeyi_baslat = st.button("Üret", type="primary", disabled=not (konu and ana_keyword))
+st.caption("Google Trends tabanlı başlık planlayıcı + Claude API ile çok-aşamalı makale üretimi")
 
 
-if uretmeyi_baslat:
-    talep = MakaleTalebi(
-        konu=konu,
-        ana_keyword=ana_keyword,
-        hedef_kitle=hedef_kitle,
-        ton=ton,
-        hedef_uzunluk=hedef_uzunluk,
-        yazar=yazar,
-        site_url=site_url,
-    )
+def _basliklari_render(oneriler) -> None:
+    """Başlık önerilerini liste olarak gösterir, her başlığın yanında 'kullan' butonu."""
+    st.success(f"✅ {len(oneriler.basliklar)} başlık önerisi hazır.")
+    for i, b in enumerate(oneriler.basliklar, 1):
+        col1, col2 = st.columns([5, 1])
+        with col1:
+            st.markdown(f"**{i}.** {b.baslik}")
+        with col2:
+            if st.button("Bu başlığı kullan", key=f"pick_{i}"):
+                st.session_state["secili_baslik"] = b.baslik
+                st.session_state["secili_ana_keyword"] = b.ana_keyword
+                st.toast(f"Başlık seçildi: {b.baslik}", icon="✅")
+                st.rerun()
 
-    durum_alani = st.empty()
-    bolum_alani = st.container()
-    with bolum_alani:
-        st.subheader("Bölüm Üretim İlerlemesi")
-        bolum_yer = st.empty()
-    bolum_kayitlari: list[str] = []
 
-    def _ilerleme(adim: str, _ekstra) -> None:
-        durum_alani.info(f"⏳ {ADIM_ETIKETLERI.get(adim, adim)}…")
-
-    def _bolum_cb(sira: int, toplam: int, bolum, _icerik) -> None:
-        bolum_kayitlari.append(f"✓ [{sira}/{toplam}] {bolum.baslik}")
-        bolum_yer.markdown("\n\n".join(bolum_kayitlari))
-
-    try:
-        with st.spinner("Pipeline çalıştırılıyor…"):
-            sonuc = calistir(talep, ilerleme=_ilerleme, bolum_callback=_bolum_cb)
-    except Exception as e:
-        durum_alani.error(f"Hata: {e}")
-        st.stop()
-
-    durum_alani.success("✅ Makale üretildi.")
-
+def _makale_sonucu_render(sonuc) -> None:
+    """Pipeline sonucunu sekmeli görünümle gösterir."""
     md_yolu, meta_yolu = kaydet(sonuc, output_dir=Path("output"))
     st.caption(f"Kaydedildi: `{md_yolu}` ve `{meta_yolu}`")
 
@@ -166,9 +136,124 @@ if uretmeyi_baslat:
         st.markdown("### Soru Bazlı Keyword'ler")
         st.write("\n".join(f"- {k}" for k in sonuc.cluster.soru_keywords))
 
-else:
-    st.info("Sol panelden konu ve ana anahtar kelime girip **Üret** tuşuna basın.")
-    st.markdown(
-        "**Pipeline:** Anahtar kelime araştırması → Outline → İçerik üretimi → "
-        "SEO meta → İç/dış linkler → Schema.org → Kalite raporu"
-    )
+
+sekme_planlayici, sekme_uretici = st.tabs(["🔍 Başlık Planlayıcı", "📝 Makale Üretici"])
+
+with sekme_planlayici:
+    st.subheader("Google Trends'ten İlhamla Başlık Önerileri")
+    st.caption("Bir konu gir; gerçek Google Trends verisinden ilham alarak 10-15 makale başlığı önereyim.")
+
+    with st.form("planlayici_form"):
+        konu_planner = st.text_input(
+            "Konu", placeholder="Örn: kahve makineleri", key="planner_konu_input"
+        )
+        col_a, col_b = st.columns(2)
+        with col_a:
+            kitle_planner = st.text_input(
+                "Hedef kitle", value="genel okuyucular", key="planner_kitle"
+            )
+            geo_planner = st.text_input("Coğrafya", value="TR", key="planner_geo")
+        with col_b:
+            sayi_planner = st.slider("Başlık sayısı", 10, 15, 12, key="planner_sayi")
+            zaman_planner = st.selectbox(
+                "Zaman aralığı",
+                ["today 12-m", "today 5-y", "today 3-m", "today 1-m", "now 7-d"],
+                key="planner_zaman",
+            )
+        getir = st.form_submit_button("Önerileri getir", type="primary")
+
+    if getir:
+        if not konu_planner.strip():
+            st.warning("Lütfen bir konu girin.")
+        else:
+            with st.spinner("Google Trends'ten veriler çekiliyor ve başlıklar üretiliyor…"):
+                try:
+                    oneriler = planla(
+                        konu=konu_planner.strip(),
+                        hedef_kitle=kitle_planner.strip() or "genel okuyucular",
+                        sayi=sayi_planner,
+                        geo=geo_planner.strip() or "TR",
+                        timeframe=zaman_planner,
+                    )
+                    st.session_state["son_oneriler"] = oneriler
+                except Exception as e:
+                    st.error(f"Hata: {e}")
+                    st.session_state.pop("son_oneriler", None)
+
+    if "son_oneriler" in st.session_state:
+        _basliklari_render(st.session_state["son_oneriler"])
+
+    if "secili_baslik" in st.session_state:
+        st.info(
+            f"✅ Seçilen başlık: **{st.session_state['secili_baslik']}** — "
+            "yukarıdaki **📝 Makale Üretici** sekmesine geçip Üret tuşuna basabilirsiniz."
+        )
+
+
+with sekme_uretici:
+    st.subheader("Makale Üretimi")
+
+    onceden_secili_baslik = st.session_state.get("secili_baslik", "")
+    onceden_secili_keyword = st.session_state.get("secili_ana_keyword", "")
+
+    if onceden_secili_baslik:
+        st.success(f"Planlayıcıdan gelen başlık: **{onceden_secili_baslik}**")
+
+    with st.sidebar:
+        st.header("Makale Parametreleri")
+        konu = st.text_input("Konu", value=onceden_secili_baslik, key="yazici_konu")
+        ana_keyword = st.text_input(
+            "Ana anahtar kelime", value=onceden_secili_keyword, key="yazici_keyword"
+        )
+        hedef_kitle = st.text_input("Hedef kitle", value="genel okuyucular", key="yazici_kitle")
+        ton = st.selectbox(
+            "Ton",
+            ["profesyonel ama anlaşılır", "samimi ve sohbet havasında",
+             "eğitici ve detaylı", "kısa ve teknik"],
+            key="yazici_ton",
+        )
+        hedef_uzunluk = st.slider("Hedef kelime sayısı", 500, 4000, 1500, step=250, key="yazici_uzunluk")
+        yazar = st.text_input("Yazar adı", value="Editör", key="yazici_yazar")
+        site_url = st.text_input("Site URL", value="https://example.com", key="yazici_site")
+        uretmeyi_baslat = st.button(
+            "Üret", type="primary", disabled=not (konu and ana_keyword), key="yazici_uret"
+        )
+
+    if uretmeyi_baslat:
+        talep = MakaleTalebi(
+            konu=konu, ana_keyword=ana_keyword, hedef_kitle=hedef_kitle,
+            ton=ton, hedef_uzunluk=hedef_uzunluk, yazar=yazar, site_url=site_url,
+        )
+
+        durum_alani = st.empty()
+        bolum_alani = st.container()
+        with bolum_alani:
+            st.subheader("Bölüm Üretim İlerlemesi")
+            bolum_yer = st.empty()
+        bolum_kayitlari: list[str] = []
+
+        def _ilerleme(adim: str, _ekstra) -> None:
+            durum_alani.info(f"⏳ {ADIM_ETIKETLERI.get(adim, adim)}…")
+
+        def _bolum_cb(sira: int, toplam: int, bolum, _icerik) -> None:
+            bolum_kayitlari.append(f"✓ [{sira}/{toplam}] {bolum.baslik}")
+            bolum_yer.markdown("\n\n".join(bolum_kayitlari))
+
+        try:
+            with st.spinner("Pipeline çalıştırılıyor…"):
+                sonuc = calistir(talep, ilerleme=_ilerleme, bolum_callback=_bolum_cb)
+        except Exception as e:
+            durum_alani.error(f"Hata: {e}")
+            st.stop()
+
+        durum_alani.success("✅ Makale üretildi.")
+        _makale_sonucu_render(sonuc)
+    else:
+        st.info(
+            "Sol panelden konu ve ana anahtar kelime girip **Üret** tuşuna basın. "
+            "Veya **🔍 Başlık Planlayıcı** sekmesinden bir başlık seçin."
+        )
+        st.markdown(
+            "**Pipeline:** Anahtar kelime araştırması → Outline → İçerik üretimi → "
+            "SEO meta → İç/dış linkler → Schema.org → Kalite raporu"
+        )

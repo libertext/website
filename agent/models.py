@@ -90,3 +90,20 @@ class DisLinkOnerisi(BaseModel):
 class LinkOnerileri(BaseModel):
     ic_linkler: list[IcLinkOnerisi] = Field(min_length=3, max_length=5)
     dis_linkler: list[DisLinkOnerisi] = Field(min_length=2, max_length=3)
+
+
+class BaslikOnerisi(BaseModel):
+    baslik: str = Field(
+        description="50-60 karakter aralığında, çekici ve tıklanma odaklı Türkçe makale başlığı."
+    )
+    ana_keyword: str = Field(
+        description="Bu başlık için kullanılacak ana anahtar kelime (makale pipeline'ına aktarılır)."
+    )
+
+
+class BaslikOnerileri(BaseModel):
+    konu: str = Field(description="Kullanıcının verdiği orijinal konu.")
+    basliklar: list[BaslikOnerisi] = Field(
+        min_length=10, max_length=15,
+        description="Trend verilerinden ilham alınmış 10-15 makale başlığı önerisi.",
+    )
