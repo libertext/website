@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mevzuat — Türkiye Kanun ve Yönetmelikleri</title>
+  <meta name="description" content="mevzuat.gov.tr üzerinden Türkiye Cumhuriyeti kanunları ve yönetmeliklerini ara, listele, oku." />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a href="/" class="brand">
+        <span class="brand-mark">⚖️</span>
+        <span class="brand-text">Mevzuat<span class="brand-dot">.</span>tr</span>
+      </a>
+      <nav class="nav" id="tur-nav"></nav>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="container">
+      <h1 id="hero-title">Türkiye Cumhuriyeti Mevzuatı</h1>
+      <p id="hero-sub">Kanun, Yönetmelik, Tebliğ, Cumhurbaşkanlığı Kararnamesi ve daha fazlası — mevzuat.gov.tr kaynağından.</p>
+      <form id="search-form" class="search">
+        <input id="search-input" type="search" placeholder="Mevzuat adı veya numarası ara…" autocomplete="off" />
+        <button type="submit">Ara</button>
+      </form>
+    </div>
+  </section>
+
+  <main class="container main">
+    <div class="meta-row">
+      <div id="result-info" class="result-info"></div>
+      <div class="page-size">
+        <label for="limit">Sayfa başı:</label>
+        <select id="limit">
+          <option value="10">10</option>
+          <option value="25" selected>25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <ul id="list" class="card-list"></ul>
+
+    <nav class="pager" id="pager"></nav>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>
+        Veri kaynağı: <a href="https://www.mevzuat.gov.tr" target="_blank" rel="noopener">mevzuat.gov.tr</a>
+        — Resmi Gazete ve T.C. Cumhurbaşkanlığı Hukuk ve Mevzuat Genel Müdürlüğü.
+      </p>
+      <p class="muted">Bu site resmi değildir; hukuki bağlayıcılığı yoktur. Kanonik metinler için her zaman resmi kaynağa başvurun.</p>
+    </div>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

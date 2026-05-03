@@ -84,3 +84,45 @@ app.py                      # Streamlit web UI
 - Varsayılan model: `claude-sonnet-4-6`. `.env` üzerinden değiştirilebilir.
 - Sistem prompt'ları cache'lenir (cache_control). Çok-bölümlü makalelerde maliyet ~%50-90 düşer.
 - Türkçe Ateşman formülü: `198.825 - (40.175 * ortHeceSayısı) - (2.610 * ortKelimeSayısı)`
+
+---
+
+## Mevzuat (Kanun & Yönetmelik) Web Uygulaması
+
+`mevzuat.gov.tr` üzerinden Türkiye Cumhuriyeti **Kanun**, **Yönetmelik**,
+**Tebliğ**, **CB Kararnamesi**, **Tüzük** ve **KHK** metinlerini listeleyen
+basit bir HTML uygulaması da bu repo içinde gelir.
+
+### Çalıştırma
+
+```bash
+pip install -r requirements.txt
+python mevzuat_app.py
+# Tarayıcıda: http://127.0.0.1:5000
+```
+
+### Özellikler
+
+- Tür sekmeleri (Kanun / Yönetmelik / Tebliğ / KHK / Tüzük / CB Kararnamesi)
+- Arama (mevzuat adı veya numarasına göre)
+- Sayfalama (10/25/50/100 satır)
+- Her kayıt için "Oku" (HTML) ve "PDF" linkleri (mevzuat.gov.tr kanonik URL)
+- Backend cache (`.cache_mevzuat/`, 6 saat TTL) — mükerrer istekleri azaltır
+- URL state (paylaşılabilir linkler: `?tur=yonetmelik&q=imar&sayfa=2`)
+
+### Yapı
+
+```
+mevzuat_app.py     # Flask backend + mevzuat.gov.tr proxy
+static/
+├── index.html
+├── style.css
+└── app.js
+```
+
+### Notlar
+
+- `mevzuat.gov.tr` bazı IP/ülke aralıklarından erişimi engelleyebilir.
+  Türkiye'den çalıştırılması önerilir.
+- Bu uygulama gayri-resmidir; bağlayıcı metin için her zaman resmi
+  kaynağa (mevzuat.gov.tr / Resmi Gazete) başvurun.
