@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>İstanbul Sonraki Ezan Vakti</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --accent: #38bdf8;
+    --highlight: #fbbf24;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --border: #334155;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .container {
+    width: 100%;
+    max-width: 480px;
+    background: var(--card);
+    border-radius: 16px;
+    padding: 32px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+  }
+  h1 {
+    margin: 0 0 4px 0;
+    font-size: 22px;
+    font-weight: 600;
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 28px;
+  }
+  .next-card {
+    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+    border-radius: 12px;
+    padding: 24px;
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  .next-label {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    opacity: 0.85;
+  }
+  .next-name {
+    font-size: 32px;
+    font-weight: 700;
+    margin: 6px 0;
+  }
+  .next-time {
+    font-size: 15px;
+    opacity: 0.9;
+    margin-bottom: 14px;
+  }
+  .countdown {
+    font-size: 36px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 1px;
+  }
+  .countdown-minutes {
+    font-size: 14px;
+    opacity: 0.85;
+    margin-top: 4px;
+  }
+  .times-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .times-list li {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: 15px;
+  }
+  .times-list li:last-child { border-bottom: none; }
+  .times-list li.upcoming {
+    background: rgba(251, 191, 36, 0.12);
+    border-radius: 8px;
+    border-bottom-color: transparent;
+  }
+  .times-list li.upcoming .name {
+    color: var(--highlight);
+    font-weight: 600;
+  }
+  .times-list li.passed {
+    opacity: 0.45;
+  }
+  .name { color: var(--text); }
+  .time { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .upcoming .time { color: var(--highlight); }
+  .footer {
+    margin-top: 24px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .error {
+    background: #7f1d1d;
+    color: #fecaca;
+    padding: 14px;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 14px;
+  }
+  .loading {
+    text-align: center;
+    color: var(--muted);
+    padding: 30px;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>İstanbul Ezan Vakitleri</h1>
+    <div class="subtitle">Diyanet İşleri Başkanlığı hesaplama yöntemi</div>
+    <div id="content" class="loading">Yükleniyor…</div>
+    <div class="footer">Veri kaynağı: Aladhan API (method=13, Diyanet)</div>
+  </div>
+
+<script>
+  const TZ = 'Europe/Istanbul';
+  const PRAYER_LABELS = {
+    Fajr: 'Sabah',
+    Dhuhr: 'Öğle',
+    Asr: 'İkindi',
+    Maghrib: 'Akşam',
+    Isha: 'Yatsı'
+  };
+  const PRAYER_KEYS = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+
+  function istanbulNow() {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: TZ,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false
+    }).formatToParts(new Date());
+    const o = {};
+    parts.forEach(p => { if (p.type !== 'literal') o[p.type] = p.value; });
+    return {
+      year: parseInt(o.year, 10),
+      month: parseInt(o.month, 10),
+      day: parseInt(o.day, 10),
+      hour: parseInt(o.hour, 10) % 24,
+      minute: parseInt(o.minute, 10),
+      second: parseInt(o.second, 10),
+      totalMs: Date.now()
+    };
+  }
+
+  function formatDateForApi(y, m, d) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${pad(d)}-${pad(m)}-${y}`;
+  }
+
+  function addDays(y, m, d, days) {
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    dt.setUTCDate(dt.getUTCDate() + days);
+    return { year: dt.getUTCFullYear(), month: dt.getUTCMonth() + 1, day: dt.getUTCDate() };
+  }
+
+  async function fetchTimings(y, m, d) {
+    const dateStr = formatDateForApi(y, m, d);
+    const cacheKey = `prayer-istanbul-${dateStr}`;
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      try { return JSON.parse(cached); } catch (e) { /* ignore */ }
+    }
+    const url = `https://api.aladhan.com/v1/timingsByCity/${dateStr}?city=Istanbul&country=Turkey&method=13`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`API hatası: ${res.status}`);
+    const json = await res.json();
+    if (!json.data || !json.data.timings) throw new Error('Beklenmeyen API yanıtı');
+    const timings = json.data.timings;
+    localStorage.setItem(cacheKey, JSON.stringify(timings));
+    return timings;
+  }
+
+  function parseTimeToMs(y, m, d, hhmm) {
+    const [hh, mm] = hhmm.split(':').map(s => parseInt(s, 10));
+    // Build a Date that represents the wall-clock time HH:MM in Europe/Istanbul on (y,m,d).
+    // Strategy: assume UTC, then correct using the timezone offset for that wall time.
+    const utcGuess = Date.UTC(y, m - 1, d, hh, mm, 0);
+    // Get what Istanbul thinks utcGuess is, compute the diff.
+    const istParts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: TZ,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false
+    }).formatToParts(new Date(utcGuess));
+    const o = {};
+    istParts.forEach(p => { if (p.type !== 'literal') o[p.type] = p.value; });
+    const istAsUtc = Date.UTC(
+      parseInt(o.year, 10),
+      parseInt(o.month, 10) - 1,
+      parseInt(o.day, 10),
+      parseInt(o.hour, 10) % 24,
+      parseInt(o.minute, 10),
+      parseInt(o.second, 10)
+    );
+    const offset = istAsUtc - utcGuess; // ms that Istanbul is ahead of UTC
+    return utcGuess - offset;
+  }
+
+  function findNext(now, todayTimings, tomorrowTimings, todayDate, tomorrowDate) {
+    for (const key of PRAYER_KEYS) {
+      const raw = todayTimings[key];
+      if (!raw) continue;
+      const hhmm = raw.split(' ')[0];
+      const ts = parseTimeToMs(todayDate.year, todayDate.month, todayDate.day, hhmm);
+      if (ts > now.totalMs) {
+        return { key, label: PRAYER_LABELS[key], time: hhmm, ts, dayLabel: 'Bugün' };
+      }
+    }
+    if (tomorrowTimings) {
+      const key = PRAYER_KEYS[0];
+      const hhmm = tomorrowTimings[key].split(' ')[0];
+      const ts = parseTimeToMs(tomorrowDate.year, tomorrowDate.month, tomorrowDate.day, hhmm);
+      return { key, label: PRAYER_LABELS[key], time: hhmm, ts, dayLabel: 'Yarın' };
+    }
+    return null;
+  }
+
+  function fmtCountdown(ms) {
+    if (ms < 0) ms = 0;
+    const totalSec = Math.floor(ms / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    const pad = n => String(n).padStart(2, '0');
+    return `${pad(h)}:${pad(m)}:${pad(s)}`;
+  }
+
+  function renderError(msg) {
+    document.getElementById('content').innerHTML =
+      `<div class="error">${msg}</div>`;
+  }
+
+  function buildList(todayTimings, nextKey, now, todayDate) {
+    let html = '<ul class="times-list">';
+    for (const key of PRAYER_KEYS) {
+      const raw = todayTimings[key];
+      if (!raw) continue;
+      const hhmm = raw.split(' ')[0];
+      const ts = parseTimeToMs(todayDate.year, todayDate.month, todayDate.day, hhmm);
+      let cls = '';
+      if (key === nextKey) cls = 'upcoming';
+      else if (ts < now.totalMs) cls = 'passed';
+      html += `<li class="${cls}"><span class="name">${PRAYER_LABELS[key]}</span><span class="time">${hhmm}</span></li>`;
+    }
+    html += '</ul>';
+    return html;
+  }
+
+  let state = null;
+
+  function render() {
+    if (!state) return;
+    const now = istanbulNow();
+    const next = findNext(now, state.todayTimings, state.tomorrowTimings, state.todayDate, state.tomorrowDate);
+    if (!next) { renderError('Sıradaki vakit hesaplanamadı.'); return; }
+
+    const remaining = next.ts - now.totalMs;
+    const minutes = Math.ceil(remaining / 60000);
+    const nextKey = (next.dayLabel === 'Bugün') ? next.key : null;
+
+    const html = `
+      <div class="next-card">
+        <div class="next-label">Sıradaki Ezan</div>
+        <div class="next-name">${next.label}</div>
+        <div class="next-time">${next.dayLabel} • ${next.time}</div>
+        <div class="countdown">${fmtCountdown(remaining)}</div>
+        <div class="countdown-minutes">${minutes} dakika kaldı</div>
+      </div>
+      ${buildList(state.todayTimings, nextKey, now, state.todayDate)}
+    `;
+    document.getElementById('content').innerHTML = html;
+
+    // If we crossed into tomorrow's first prayer, refresh data once.
+    if (next.dayLabel === 'Yarın' && remaining < 0) {
+      init();
+    }
+  }
+
+  async function init() {
+    try {
+      const now = istanbulNow();
+      const todayDate = { year: now.year, month: now.month, day: now.day };
+      const tomorrowDate = addDays(now.year, now.month, now.day, 1);
+      const todayTimings = await fetchTimings(todayDate.year, todayDate.month, todayDate.day);
+      let tomorrowTimings = null;
+      // Pre-fetch tomorrow only if we might need it (after Isha)
+      const ishaHHMM = todayTimings.Isha.split(' ')[0];
+      const ishaTs = parseTimeToMs(todayDate.year, todayDate.month, todayDate.day, ishaHHMM);
+      if (now.totalMs >= ishaTs) {
+        tomorrowTimings = await fetchTimings(tomorrowDate.year, tomorrowDate.month, tomorrowDate.day);
+      }
+      state = { todayTimings, tomorrowTimings, todayDate, tomorrowDate };
+      render();
+    } catch (e) {
+      renderError(`Vakitler alınamadı: ${e.message}`);
+    }
+  }
+
+  init();
+  setInterval(() => { if (state) render(); }, 1000);
+</script>
+</body>
+</html>
