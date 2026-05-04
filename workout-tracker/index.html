@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fitness Ajanım — Spor Takip</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">💪</span>
+      <div>
+        <h1>Fitness Ajanım</h1>
+        <p class="tagline">Antrenman, ilerleme ve kalori takibi</p>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab-btn active" data-tab="today">Bugün</button>
+      <button class="tab-btn" data-tab="archive">Arşiv</button>
+      <button class="tab-btn" data-tab="suggestions">Öneriler</button>
+      <button class="tab-btn" data-tab="calories">Kalori</button>
+      <button class="tab-btn" data-tab="profile">Profil</button>
+    </nav>
+  </header>
+
+  <main class="container">
+
+    <!-- BUGÜN -->
+    <section id="tab-today" class="tab-panel active">
+      <div class="grid two-col">
+        <div class="card">
+          <h2>Antrenman Ekle</h2>
+          <form id="workout-form">
+            <div class="row">
+              <label>
+                Tarih
+                <input type="date" id="f-date" required />
+              </label>
+              <label>
+                Gün
+                <input type="text" id="f-day" readonly placeholder="Otomatik" />
+              </label>
+            </div>
+            <div class="row">
+              <label>
+                Bölge
+                <input list="regions-list" id="f-region" placeholder="Örn. Göğüs" required />
+                <datalist id="regions-list"></datalist>
+              </label>
+              <label>
+                Hareket
+                <input list="exercises-list" id="f-exercise" placeholder="Örn. Bench Press" required />
+                <datalist id="exercises-list"></datalist>
+              </label>
+            </div>
+            <div class="row three">
+              <label>
+                Ağırlık (kg)
+                <input type="number" id="f-weight" min="0" step="0.5" required />
+              </label>
+              <label>
+                Set
+                <input type="number" id="f-sets" min="1" max="20" value="3" required />
+              </label>
+              <label>
+                Tekrar
+                <input type="number" id="f-reps" min="1" max="100" value="10" required />
+              </label>
+            </div>
+            <label>
+              Not (opsiyonel)
+              <input type="text" id="f-note" placeholder="Form, his, RIR vs." />
+            </label>
+            <div class="actions">
+              <button type="submit" class="primary">Kaydet</button>
+              <button type="button" id="btn-quick-fill" class="ghost">Son Antrenmanı Çağır</button>
+            </div>
+            <p class="hint" id="suggest-hint"></p>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>Günün Antrenmanı</h2>
+            <select id="today-date-select"></select>
+          </div>
+          <div id="today-summary" class="summary-stats"></div>
+          <div id="today-list" class="entries"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Haftalık Hacim</h2>
+        <div class="chart-wrap"><canvas id="volume-chart"></canvas></div>
+      </div>
+    </section>
+
+    <!-- ARŞİV -->
+    <section id="tab-archive" class="tab-panel">
+      <div class="card">
+        <h2>Arşiv</h2>
+        <div class="filters">
+          <label>
+            Başlangıç
+            <input type="date" id="filter-from" />
+          </label>
+          <label>
+            Bitiş
+            <input type="date" id="filter-to" />
+          </label>
+          <label>
+            Bölge
+            <select id="filter-region"><option value="">Hepsi</option></select>
+          </label>
+          <label>
+            Hareket
+            <select id="filter-exercise"><option value="">Hepsi</option></select>
+          </label>
+          <button id="filter-reset" class="ghost">Temizle</button>
+          <div class="export-group">
+            <button id="export-json" class="ghost">JSON İndir</button>
+            <button id="export-csv" class="ghost">CSV İndir</button>
+            <label class="ghost file-label">
+              JSON Yükle
+              <input type="file" id="import-json" accept="application/json" hidden />
+            </label>
+            <button id="seed-load" class="ghost">Örnek Veriyi Yükle</button>
+            <button id="data-clear" class="danger">Tümünü Sil</button>
+          </div>
+        </div>
+        <div id="archive-stats" class="summary-stats"></div>
+        <div id="archive-table-wrap"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>Hareket İlerlemesi</h2>
+          <select id="progress-exercise"></select>
+        </div>
+        <div class="chart-wrap"><canvas id="progress-chart"></canvas></div>
+        <p id="progress-summary" class="hint"></p>
+      </div>
+    </section>
+
+    <!-- ÖNERİLER -->
+    <section id="tab-suggestions" class="tab-panel">
+      <div class="grid two-col">
+        <div class="card">
+          <h2>Akıllı Öneriler</h2>
+          <div id="suggestions-list" class="suggestions"></div>
+        </div>
+        <div class="card">
+          <h2>Hareket Bazlı Sonraki Hedef</h2>
+          <p class="hint">Progressive overload prensibi: son antrenmana göre +%2.5 ağırlık veya +1 tekrar.</p>
+          <div id="next-targets" class="entries"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Kas Grubu Frekansı (son 14 gün)</h2>
+        <div class="chart-wrap"><canvas id="frequency-chart"></canvas></div>
+        <p class="hint">İdeal: her büyük kas grubu haftada en az 2 kez (10+ set hacim).</p>
+      </div>
+
+      <div class="card">
+        <h2>Hazır Antrenman Şablonları</h2>
+        <div id="templates" class="templates"></div>
+      </div>
+    </section>
+
+    <!-- KALORİ -->
+    <section id="tab-calories" class="tab-panel">
+      <div class="grid two-col">
+        <div class="card">
+          <h2>Günlük Kalori İhtiyacı</h2>
+          <p class="hint">Mifflin-St Jeor formülüyle BMR ve TDEE hesabı. Profil sekmesinden bilgilerinizi girin.</p>
+          <div id="tdee-result" class="metrics"></div>
+          <div class="macros" id="macros-result"></div>
+        </div>
+
+        <div class="card">
+          <h2>Antrenman Kalori Yakımı</h2>
+          <form id="cal-form">
+            <div class="row">
+              <label>
+                Tarih
+                <input type="date" id="cal-date" />
+              </label>
+              <label>
+                MET
+                <select id="cal-met">
+                  <option value="3.5">Hafif tempolu (3.5 MET)</option>
+                  <option value="5" selected>Orta yoğunluk direnç (5.0 MET)</option>
+                  <option value="6">Yoğun direnç antrenmanı (6.0 MET)</option>
+                  <option value="8">Crossfit / metabolik (8.0 MET)</option>
+                </select>
+              </label>
+            </div>
+            <label>
+              Antrenman süresi (dk)
+              <input type="number" id="cal-minutes" min="5" step="5" value="60" />
+            </label>
+            <button type="submit" class="primary">Hesapla</button>
+          </form>
+          <div id="calorie-result" class="metrics"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Antrenman Bazlı Tahmini Yakım (otomatik)</h2>
+        <p class="hint">Arşivdeki antrenmanların süresi bilinmediğinden, set başına ~1.5 dk kabul edilir. Vücut ağırlığını profilden alır.</p>
+        <div id="auto-burn-list" class="entries"></div>
+      </div>
+    </section>
+
+    <!-- PROFİL -->
+    <section id="tab-profile" class="tab-panel">
+      <div class="card">
+        <h2>Profil Bilgileri</h2>
+        <form id="profile-form">
+          <div class="row">
+            <label>
+              Ad
+              <input type="text" id="p-name" placeholder="İsim" />
+            </label>
+            <label>
+              Cinsiyet
+              <select id="p-gender">
+                <option value="erkek">Erkek</option>
+                <option value="kadin">Kadın</option>
+              </select>
+            </label>
+          </div>
+          <div class="row three">
+            <label>
+              Yaş
+              <input type="number" id="p-age" min="10" max="100" value="25" />
+            </label>
+            <label>
+              Boy (cm)
+              <input type="number" id="p-height" min="100" max="230" value="175" />
+            </label>
+            <label>
+              Kilo (kg)
+              <input type="number" id="p-weight" min="30" max="200" step="0.1" value="75" />
+            </label>
+          </div>
+          <div class="row">
+            <label>
+              Aktivite seviyesi
+              <select id="p-activity">
+                <option value="1.2">Hareketsiz (masa başı)</option>
+                <option value="1.375">Hafif aktif (1-3 gün/hafta)</option>
+                <option value="1.55" selected>Orta aktif (3-5 gün/hafta)</option>
+                <option value="1.725">Çok aktif (6-7 gün/hafta)</option>
+                <option value="1.9">Aşırı aktif (atlet)</option>
+              </select>
+            </label>
+            <label>
+              Hedef
+              <select id="p-goal">
+                <option value="cut">Yağ yakımı (-%20)</option>
+                <option value="maintain" selected>Korumak</option>
+                <option value="bulk">Kas yapımı (+%15)</option>
+              </select>
+            </label>
+          </div>
+          <div class="actions">
+            <button type="submit" class="primary">Profili Kaydet</button>
+          </div>
+        </form>
+        <div id="profile-summary" class="metrics"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <span id="footer-stats"></span>
+    <span class="muted">Veriler sadece tarayıcınızda saklanır (localStorage).</span>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
