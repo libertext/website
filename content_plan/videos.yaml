@@ -1,0 +1,21 @@
+# YouTube Video Planı — tek doğruluk kaynağı
+#
+# Her video bir liste öğesidir. Elle düzenleyebilir veya `plan.py` komutlarını
+# kullanabilirsin. Alanlar:
+#   id          : benzersiz sayı (plan.py ile eklerken otomatik atanır)
+#   baslik      : video başlığı
+#   konu        : kısa konu/ana fikir
+#   yayin_tarihi: planlanan yayın tarihi (YYYY-MM-DD) — boş bırakılabilir
+#   durum       : fikir | senaryo | cekim | kurgu | yayinda
+#   etiketler   : liste — kategori/oynatma listesi vb.
+#
+# Not: plan.py ile kaydederken bu yorum satırları silinir; kullanım için
+# README.md'ye bak. Aşağıdaki örneği silip kendi videolarınla başlayabilirsin.
+
+videolar:
+  - id: 1
+    baslik: "Örnek: Kanala Hoş Geldiniz"
+    konu: "Kanalın ne hakkında olduğunu anlatan tanıtım videosu"
+    yayin_tarihi: 2026-07-01
+    durum: fikir
+    etiketler: [tanıtım, genel]
