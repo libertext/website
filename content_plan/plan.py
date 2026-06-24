@@ -29,12 +29,13 @@ VERI = KLASOR / "videos.yaml"
 PLAN_MD = KLASOR / "PLAN.md"
 
 # Durumlar üretim sırasına göre. İlerledikçe video bir sonraki duruma geçer.
-DURUMLAR = ["fikir", "senaryo", "cekim", "kurgu", "yayinda"]
+DURUMLAR = ["fikir", "senaryo", "cekim", "kurgu", "zamanlandi", "yayinda"]
 DURUM_ETIKET = {
     "fikir": "💡 Fikir",
     "senaryo": "📝 Senaryo",
     "cekim": "🎬 Çekim",
     "kurgu": "✂️ Kurgu",
+    "zamanlandi": "⏰ Zamanlandı",
     "yayinda": "✅ Yayında",
 }
 

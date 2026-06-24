@@ -15,3 +15,7 @@ env/
 output/*.md
 output/*.json
 !output/.gitkeep
+
+# YouTube OAuth gizli dosyaları — asla commit etme
+content_plan/client_secret.json
+content_plan/token.json
