@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Antrenman Takip Tablosu</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #1a1d24;
+    --panel-2: #222631;
+    --border: #2c313c;
+    --text: #e7ebf0;
+    --muted: #9aa3b2;
+    --accent: #4f8cff;
+    --accent-soft: #1f3358;
+    --good: #2ecc71;
+    --good-soft: #14361f;
+    --danger: #ff5d5d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 16px 80px; }
+  header { margin-bottom: 18px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: .92rem; }
+
+  .toolbar {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    margin: 16px 0; padding: 12px; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 12px;
+  }
+  button {
+    font: inherit; cursor: pointer; border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--text);
+    padding: 8px 14px; border-radius: 9px; transition: .15s;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.primary:hover { filter: brightness(1.08); }
+  button.ghost { background: transparent; }
+  .spacer { flex: 1; }
+  .hint { color: var(--muted); font-size: .82rem; }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
+  table { border-collapse: collapse; width: 100%; min-width: 720px; }
+  th, td { border-bottom: 1px solid var(--border); padding: 10px 12px; text-align: center; vertical-align: middle; }
+  thead th { background: var(--panel); position: sticky; top: 0; font-size: .85rem; color: var(--muted); font-weight: 600; }
+  tbody tr:nth-child(even) td { background: rgba(255,255,255,.015); }
+  tbody tr:hover td { background: rgba(79,140,255,.06); }
+
+  .col-move { position: sticky; left: 0; z-index: 2; background: var(--panel) !important; text-align: left; min-width: 170px; }
+  thead .col-move { z-index: 3; }
+  .ex-name { font-weight: 600; }
+  .ex-meta { color: var(--muted); font-size: .78rem; margin-top: 2px; }
+
+  [contenteditable] { outline: none; }
+  td.target [contenteditable], th [contenteditable] { display: inline-block; min-width: 30px; }
+  td.session { min-width: 120px; }
+  .cell {
+    display: inline-block; min-width: 84px; padding: 6px 8px; border-radius: 7px;
+    border: 1px dashed transparent; background: rgba(255,255,255,.02); color: var(--text);
+  }
+  .cell:focus { border-color: var(--accent); background: var(--accent-soft); }
+  .cell.filled { border-style: solid; border-color: var(--good); background: var(--good-soft); }
+  .cell:empty:before { content: "—"; color: var(--muted); }
+
+  .day-head { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+  .day-date { font-weight: 600; color: var(--text); }
+  .day-actions { display: flex; gap: 4px; }
+  .icon-btn { padding: 2px 7px; font-size: .72rem; border-radius: 6px; line-height: 1.4; }
+  .icon-btn.del:hover { border-color: var(--danger); color: var(--danger); }
+
+  .empty-note { padding: 26px; text-align: center; color: var(--muted); }
+  footer { margin-top: 18px; color: var(--muted); font-size: .8rem; text-align: center; }
+  .save-flash {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    background: var(--good); color: #06210f; padding: 8px 16px; border-radius: 20px;
+    font-size: .82rem; font-weight: 600; opacity: 0; transition: opacity .3s; pointer-events: none;
+  }
+  .save-flash.show { opacity: 1; }
+  input[type=file] { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🏋️ Antrenman Takip Tablosu</h1>
+    <div class="sub">Programın ilerledikçe yeni gün ekle, her hareket için kaldırdığın ağırlık × tekrarı yaz. Veriler tarayıcına otomatik kaydolur.</div>
+  </header>
+
+  <div class="toolbar">
+    <button class="primary" id="addDay">+ Antrenman Günü Ekle</button>
+    <button id="addExercise" class="ghost">+ Hareket Ekle</button>
+    <span class="spacer"></span>
+    <button id="exportBtn" class="ghost">⬇ Yedek Al (JSON)</button>
+    <button id="importBtn" class="ghost">⬆ Yedek Yükle</button>
+    <input type="file" id="importFile" accept="application/json" />
+    <button id="resetBtn" class="ghost">↺ Sıfırla</button>
+  </div>
+  <div class="hint" style="margin:-6px 0 14px">
+    İpucu: Hücreleri, hareket adlarını ve hedef değerleri doğrudan tıklayıp düzenleyebilirsin. Bir hücreye değer girdiğinde <span style="color:var(--good)">yeşil</span> olur (o günü tamamladın demektir).
+  </div>
+
+  <div class="table-scroll">
+    <table id="tracker">
+      <thead>
+        <tr id="headRow">
+          <th class="col-move">Hareket</th>
+          <th class="target">Hedef Ağırlık</th>
+          <th class="target">Set × Tekrar</th>
+          <!-- gün sütunları buraya -->
+        </tr>
+      </thead>
+      <tbody id="body"></tbody>
+    </table>
+  </div>
+
+  <footer>Veriler yalnızca bu cihazda/tarayıcıda saklanır. Başka cihaza taşımak için "Yedek Al" kullan.</footer>
+</div>
+
+<div class="save-flash" id="flash">Kaydedildi ✓</div>
+
+<script>
+const STORAGE_KEY = "antrenman_takip_v1";
+
+const DEFAULT_DATA = {
+  exercises: [
+    { name: "Deadlift",                 weight: "40 kg",            scheme: "3×8"  },
+    { name: "Squat",                    weight: "35 kg",            scheme: "3×8"  },
+    { name: "Bench Press",              weight: "35 kg",            scheme: "3×10" },
+    { name: "Bent-Over Row",            weight: "30 kg",            scheme: "3×10" },
+    { name: "Dumbbell Overhead Press",  weight: "5 kg (her el)",    scheme: "3×12" },
+    { name: "Barbell Biceps Curl",      weight: "20 kg",            scheme: "3×8"  },
+    { name: "Triceps Extension",        weight: "10 kg",            scheme: "3×12" },
+    { name: "Plank",                    weight: "Vücut ağırlığı",   scheme: "60 sn" }
+  ],
+  days: []   // { id, date, values: { exerciseIndex: "text" } }
+};
+
+let data = load();
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return structuredClone(DEFAULT_DATA);
+}
+
+let saveTimer = null;
+function save(flash = true) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  if (flash) {
+    clearTimeout(saveTimer);
+    const f = document.getElementById("flash");
+    f.classList.add("show");
+    saveTimer = setTimeout(() => f.classList.remove("show"), 900);
+  }
+}
+
+function todayISO() {
+  const d = new Date();
+  return d.toISOString().slice(0, 10);
+}
+function fmtDate(iso) {
+  // iso = YYYY-MM-DD -> DD.MM
+  const [y, m, d] = iso.split("-");
+  return `${d}.${m}`;
+}
+
+function uid() {
+  return "d" + Math.random().toString(36).slice(2, 9);
+}
+
+function render() {
+  const headRow = document.getElementById("headRow");
+  const body = document.getElementById("body");
+
+  // gün başlıklarını temizle (ilk 3 sabit sütun kalsın)
+  while (headRow.children.length > 3) headRow.removeChild(headRow.lastChild);
+
+  data.days.forEach((day, di) => {
+    const th = document.createElement("th");
+    th.className = "session";
+    th.innerHTML = `
+      <div class="day-head">
+        <span class="day-date" contenteditable data-day="${day.id}" data-field="date">${day.date}</span>
+        <div class="day-actions">
+          <button class="icon-btn del" title="Günü sil" data-del="${day.id}">sil</button>
+        </div>
+      </div>`;
+    headRow.appendChild(th);
+  });
+
+  body.innerHTML = "";
+  data.exercises.forEach((ex, ei) => {
+    const tr = document.createElement("tr");
+
+    const nameTd = document.createElement("td");
+    nameTd.className = "col-move";
+    nameTd.innerHTML = `
+      <div class="ex-name" contenteditable data-ex="${ei}" data-field="name">${esc(ex.name)}</div>`;
+    tr.appendChild(nameTd);
+
+    const wTd = document.createElement("td");
+    wTd.className = "target";
+    wTd.innerHTML = `<span contenteditable data-ex="${ei}" data-field="weight">${esc(ex.weight)}</span>`;
+    tr.appendChild(wTd);
+
+    const sTd = document.createElement("td");
+    sTd.className = "target";
+    sTd.innerHTML = `<span contenteditable data-ex="${ei}" data-field="scheme">${esc(ex.scheme)}</span>`;
+    tr.appendChild(sTd);
+
+    data.days.forEach((day) => {
+      const td = document.createElement("td");
+      td.className = "session";
+      const val = (day.values && day.values[ei]) || "";
+      const cell = document.createElement("div");
+      cell.className = "cell" + (val.trim() ? " filled" : "");
+      cell.setAttribute("contenteditable", "true");
+      cell.dataset.day = day.id;
+      cell.dataset.ex = ei;
+      cell.dataset.cell = "1";
+      cell.textContent = val;
+      td.appendChild(cell);
+      tr.appendChild(td);
+    });
+
+    body.appendChild(tr);
+  });
+
+  if (data.exercises.length === 0) {
+    body.innerHTML = `<tr><td class="empty-note" colspan="99">Henüz hareket yok. "Hareket Ekle" ile başla.</td></tr>`;
+  }
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+}
+
+// ---- Olaylar ----
+document.getElementById("addDay").addEventListener("click", () => {
+  data.days.push({ id: uid(), date: fmtDate(todayISO()), values: {} });
+  save();
+  render();
+  // yeni sütuna kaydır
+  const sc = document.querySelector(".table-scroll");
+  sc.scrollLeft = sc.scrollWidth;
+});
+
+document.getElementById("addExercise").addEventListener("click", () => {
+  data.exercises.push({ name: "Yeni hareket", weight: "", scheme: "" });
+  save();
+  render();
+});
+
+document.getElementById("resetBtn").addEventListener("click", () => {
+  if (confirm("Tüm veriler silinip varsayılan programa dönülecek. Emin misin?")) {
+    data = structuredClone(DEFAULT_DATA);
+    save();
+    render();
+  }
+});
+
+document.getElementById("exportBtn").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "antrenman-yedek-" + todayISO() + ".json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+document.getElementById("importBtn").addEventListener("click", () => {
+  document.getElementById("importFile").click();
+});
+document.getElementById("importFile").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const obj = JSON.parse(reader.result);
+      if (!obj.exercises || !obj.days) throw new Error("Geçersiz dosya");
+      data = obj;
+      save();
+      render();
+    } catch (err) {
+      alert("Yedek yüklenemedi: " + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = "";
+});
+
+// Silme (gün) + delegasyon
+document.getElementById("tracker").addEventListener("click", (e) => {
+  const del = e.target.closest("[data-del]");
+  if (del) {
+    const id = del.getAttribute("data-del");
+    const day = data.days.find(d => d.id === id);
+    if (confirm(`"${day ? day.date : "Bu"}" günü silinsin mi?`)) {
+      data.days = data.days.filter(d => d.id !== id);
+      save();
+      render();
+    }
+  }
+});
+
+// Düzenlemeleri yakala (blur ile kaydet)
+document.getElementById("tracker").addEventListener("focusout", (e) => {
+  const el = e.target;
+  // hücre değeri
+  if (el.dataset && el.dataset.cell) {
+    const day = data.days.find(d => d.id === el.dataset.day);
+    if (day) {
+      const v = el.textContent.trim();
+      if (v) day.values[el.dataset.ex] = v;
+      else delete day.values[el.dataset.ex];
+      el.classList.toggle("filled", !!v);
+    }
+    save();
+    return;
+  }
+  // hareket alanları
+  if (el.dataset && el.dataset.ex !== undefined && el.dataset.field) {
+    const ex = data.exercises[+el.dataset.ex];
+    if (ex) ex[el.dataset.field] = el.textContent.trim();
+    save();
+    return;
+  }
+  // gün tarihi
+  if (el.dataset && el.dataset.day && el.dataset.field === "date") {
+    const day = data.days.find(d => d.id === el.dataset.day);
+    if (day) day.date = el.textContent.trim();
+    save();
+  }
+});
+
+// Enter ile yeni satıra geçme yerine odağı bırak
+document.getElementById("tracker").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && e.target.isContentEditable) {
+    e.preventDefault();
+    e.target.blur();
+  }
+});
+
+render();
+</script>
+</body>
+</html>
