@@ -19,6 +19,10 @@ dist
 # prisma
 prisma/*.db
 
+# redis snapshot (local dev stack)
+dump.rdb
+*.rdb
+
 # storage (local file storage adapter)
 /storage
 
