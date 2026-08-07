@@ -6,6 +6,24 @@ ArticlePilot AI lets teams research, generate, edit, review, and publish long-fo
 
 ---
 
+## Deploy a live site (one click)
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
+
+The repo ships a [`render.yaml`](./render.yaml) Blueprint that provisions the whole
+stack — **PostgreSQL + Redis + the web app** — in one Render project. Generation runs
+in-process (`GENERATION_MODE=inline`), so **no separate worker is needed to launch**.
+
+1. Push this repo to your GitHub, then in Render: **New → Blueprint → connect the repo → Apply**.
+2. Paste one secret when prompted — `APP_ENCRYPTION_KEY` (generate with `openssl rand -hex 32`, and **back it up**).
+3. Optionally set `INITIAL_ADMIN_EMAIL` (that email becomes super-admin), `NEXT_PUBLIC_APP_URL`, and any AI keys.
+4. First boot runs migrations + seed automatically. Register with your admin email and start generating — the **Mock** model works with zero AI keys.
+
+Prefer Vercel + Neon + Upstash (with a dedicated worker for scale)? See the full
+step-by-step guide in [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md).
+
+---
+
 ## Table of contents
 
 - [Architecture summary](#architecture-summary)

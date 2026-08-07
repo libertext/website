@@ -15,6 +15,23 @@ Bu rehber ArticlePilot AI'ı üretim ortamına, ekran ekran alır:
 
 ---
 
+## ⚡ En hızlı yol — Render Blueprint (tek tık)
+
+Aşağıdaki 4 servisli kurulumla uğraşmak istemiyorsanız, depodaki
+[`render.yaml`](../render.yaml) tüm yığını (PostgreSQL + Redis + web) **tek Render
+projesinde** kurar. Üretim in-process çalışır (`GENERATION_MODE=inline`), ayrı
+worker gerekmez.
+
+1. Repoyu kendi GitHub'ınıza alın → Render: **New → Blueprint → repo → Apply**.
+2. Tek sır yapıştırın: `APP_ENCRYPTION_KEY` (`openssl rand -hex 32`, **yedekleyin**).
+3. İlk açılışta migration + seed otomatik çalışır. Admin e-postanızla kayıt olun.
+
+Ölçeklenince `GENERATION_MODE`'u `queue` yapıp `render.yaml`'daki worker bloğunu
+açın. Aşağıdaki Vercel + Neon + Upstash yolu daha fazla kontrol/ölçek isteyenler
+içindir.
+
+---
+
 ## 0. Ön hazırlık — sırlar (secrets) üret
 
 Yerelde şu iki değeri üret ve bir kenara not al (Vercel + Railway'e gireceğiz):

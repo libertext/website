@@ -11,6 +11,13 @@ import { GenerationService } from "@/lib/services/generation-service";
  */
 export async function dispatchGeneration(payload: Omit<ArticleGeneratePayload, "idempotencyKey">) {
   const full: ArticleGeneratePayload = { ...payload, idempotencyKey: randomToken(12) };
+
+  // Single-service mode: run in-process, no worker required (§3 alt path).
+  if (process.env.GENERATION_MODE === "inline") {
+    await GenerationService.generateArticle(full);
+    return { mode: "inline" as const };
+  }
+
   try {
     await generationQueue().add(JOB.articleGenerate, full, DEFAULT_JOB_OPTS);
     return { mode: "queued" as const };

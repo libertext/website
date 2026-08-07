@@ -38,6 +38,11 @@ const serverSchema = z.object({
   // Bootstrap the first super-admin (§140).
   INITIAL_ADMIN_EMAIL: z.string().email().optional(),
 
+  // Generation dispatch mode. "queue" (default) enqueues to BullMQ for a separate
+  // worker to process. "inline" runs generation in-process — for single-service
+  // deployments on a long-running host (Render/Railway) with no worker.
+  GENERATION_MODE: z.enum(["queue", "inline"]).default("queue"),
+
   // Observability (optional).
   SENTRY_DSN: z.string().optional(),
 

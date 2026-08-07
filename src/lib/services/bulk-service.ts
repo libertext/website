@@ -55,12 +55,18 @@ export const BulkService = {
     });
 
     // Enqueue each item; fall back to inline processing if Redis is down.
+    // In single-service (inline) mode, process in-process without a worker (§3 alt path).
+    const inline = process.env.GENERATION_MODE === "inline";
     for (const item of job.items) {
       const payload = { workspaceId: params.workspaceId, bulkJobId: job.id, bulkJobItemId: item.id };
+      if (inline) {
+        // Fire-and-forget on the long-running web process; items reconcile the job as they finish.
+        void inlineProcess(payload).catch((e) => console.error("[bulk] inline item failed", e));
+        continue;
+      }
       try {
         await bulkQueue().add(JOB.bulkItem, payload, DEFAULT_JOB_OPTS);
       } catch {
-        // Inline fallback keeps small setups working without a worker.
         void inlineProcess(payload).catch((e) => console.error("[bulk] inline item failed", e));
       }
     }

@@ -1,0 +1,90 @@
+# Render Blueprint — one-click deploy of the whole stack (§DEPLOYMENT).
+# Defines Postgres + Redis (Key Value) + the Next.js web service. Generation runs
+# in-process (GENERATION_MODE=inline) so NO separate worker is required for launch.
+# To scale later, flip GENERATION_MODE to "queue" and add a `type: worker` service
+# running `pnpm start:worker` (see the commented block at the bottom).
+#
+# Deploy: Render Dashboard → New → Blueprint → connect this repo → Apply.
+# The only value you must paste is APP_ENCRYPTION_KEY (see below).
+
+databases:
+  - name: articlepilot-db
+    databaseName: articlepilot
+    user: articlepilot
+    plan: free # 90-day free Postgres; upgrade before it expires
+
+services:
+  # ── Redis (Render "Key Value") for rate-limiting + queue readiness ──
+  - type: keyvalue
+    name: articlepilot-redis
+    plan: free
+    maxmemoryPolicy: noeviction # BullMQ requirement — never evict
+    ipAllowList: [] # internal connections only
+
+  # ── Web (Next.js). Long-running Node server → inline generation works here ──
+  - type: web
+    name: articlepilot
+    runtime: node
+    plan: starter # "free" also works but spins down when idle
+    region: frankfurt # move closer to your users if needed
+    buildCommand: "corepack enable && pnpm install --frozen-lockfile && pnpm build"
+    # Migrate + (idempotent) seed on every boot, then start. Guarantees the DB is
+    # ready with plans, the model registry and the first super-admin.
+    startCommand: "pnpm db:deploy && pnpm db:seed && pnpm start"
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: articlepilot-db
+          property: connectionString
+      - key: DIRECT_DATABASE_URL # Render Postgres is a single endpoint; reuse it
+        fromDatabase:
+          name: articlepilot-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: articlepilot-redis
+          property: connectionString
+      - key: GENERATION_MODE
+        value: inline # single-service: no worker needed
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_APP_NAME
+        value: ArticlePilot AI
+      - key: EMAIL_PROVIDER
+        value: console
+      - key: AUTH_SECRET
+        generateValue: true # Render generates a strong random value
+      # ⚠️ Must be 64 hex chars. Generate locally: openssl rand -hex 32
+      # Render can't generate the exact format, so you paste it once. BACK IT UP.
+      - key: APP_ENCRYPTION_KEY
+        sync: false
+      # Optional — set in the dashboard after first deploy:
+      - key: INITIAL_ADMIN_EMAIL # the email you register with becomes super-admin
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL # your https://…onrender.com or custom domain
+        sync: false
+      - key: OPENAI_API_KEY # optional platform key (users can BYOK instead)
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+
+  # ── Optional: dedicated worker for scale (remove GENERATION_MODE=inline above) ──
+  # - type: worker
+  #   name: articlepilot-worker
+  #   runtime: node
+  #   plan: starter
+  #   buildCommand: "corepack enable && pnpm install --frozen-lockfile"
+  #   startCommand: "pnpm start:worker"
+  #   envVars:
+  #     - key: DATABASE_URL
+  #       fromDatabase: { name: articlepilot-db, property: connectionString }
+  #     - key: DIRECT_DATABASE_URL
+  #       fromDatabase: { name: articlepilot-db, property: connectionString }
+  #     - key: REDIS_URL
+  #       fromService: { type: keyvalue, name: articlepilot-redis, property: connectionString }
+  #     - key: APP_ENCRYPTION_KEY   # MUST match the web service exactly
+  #       sync: false
