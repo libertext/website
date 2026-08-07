@@ -34,7 +34,7 @@ const serverSchema = z.object({
 
   // Email (optional; defaults to console transport).
   EMAIL_PROVIDER: z.enum(["console", "resend", "ses", "postmark"]).default("console"),
-  EMAIL_FROM: z.string().default("ArticlePilot <no-reply@example.com>"),
+  EMAIL_FROM: z.string().default("DYZGE <no-reply@example.com>"),
   RESEND_API_KEY: z.string().optional(),
 
   // Bootstrap the first super-admin (§140).
