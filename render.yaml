@@ -26,8 +26,7 @@ services:
     name: articlepilot
     runtime: node
     plan: free # $0, no card required; spins down when idle (upgrade to "starter" for always-on)
-    region: frankfurt # move closer to your users if needed
-    buildCommand: "corepack enable && pnpm install --frozen-lockfile && pnpm build"
+    buildCommand: "pnpm install --frozen-lockfile && pnpm build"
     # Migrate + (idempotent) seed on every boot, then start. Guarantees the DB is
     # ready with plans, the model registry and the first super-admin.
     startCommand: "pnpm db:deploy && pnpm db:seed && pnpm start"
