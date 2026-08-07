@@ -26,7 +26,7 @@ export default async function SitesPage() {
     <div className="space-y-6">
       <PageHeader
         title="WordPress Siteleri"
-        description="Bağlantı için ArticlePilot Connector eklentisi önerilir; alternatif olarak uygulama şifresi kullanabilirsiniz."
+        description="Bağlantı için kendi WordPress eklentimiz önerilir; alternatif olarak uygulama şifresi kullanabilirsiniz."
       />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">

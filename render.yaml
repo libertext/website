@@ -50,7 +50,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: NEXT_PUBLIC_APP_NAME
-        value: ArticlePilot AI
+        value: DYZGE Yapay Zeka
       - key: EMAIL_PROVIDER
         value: console
       - key: AUTH_SECRET
