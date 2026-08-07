@@ -1,0 +1,29 @@
+# YouTube Video Planı — tek doğruluk kaynağı
+#
+# Her video bir liste öğesidir. Elle düzenleyebilir veya `plan.py` komutlarını
+# kullanabilirsin. Alanlar:
+#   id          : benzersiz sayı (plan.py ile eklerken otomatik atanır)
+#   baslik      : video başlığı
+#   konu        : kısa konu/ana fikir
+#   yayin_tarihi: planlanan yayın tarihi (YYYY-MM-DD)
+#   durum       : fikir | senaryo | cekim | kurgu | zamanlandi | yayinda
+#   etiketler   : liste — kategori/oynatma listesi vb.
+#
+# Otomatik YouTube yüklemesi (youtube.py yukle <id>) için ek alanlar:
+#   dosya       : yerel video dosyası yolu (örn. ~/videolar/tanitim.mp4)
+#   yayin_saati : HH:MM (varsayılan 10:00) — yayin_tarihi ile birleşir
+#   aciklama    : YouTube açıklama metni (yoksa 'konu' kullanılır)
+#   youtube_id  : yükleme sonrası otomatik doldurulur
+#
+# Not: plan.py ile kaydederken bu yorum satırları silinir; README.md'ye bak.
+
+videolar:
+  - id: 1
+    baslik: "Örnek: Kanala Hoş Geldiniz"
+    konu: "Kanalın ne hakkında olduğunu anlatan tanıtım videosu"
+    yayin_tarihi: 2026-07-01
+    yayin_saati: "10:00"
+    durum: fikir
+    etiketler: [tanıtım, genel]
+    # dosya: ~/videolar/tanitim.mp4   # yükleme için dosya yolunu aç
+    # aciklama: "Detaylı açıklama metni buraya..."

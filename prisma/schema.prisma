@@ -1,0 +1,977 @@
+// ArticlePilot AI — data model (§79)
+// Multi-tenant SaaS: the tenant boundary is Workspace. Every tenant-scoped row
+// carries workspaceId and MUST be filtered by it in the service layer (§5).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Runtime queries use the (pooled) DATABASE_URL. Migrations use directUrl — a
+  // non-pooled connection — required by managed Postgres like Neon (§DEPLOYMENT).
+  // directUrl falls back to DATABASE_URL locally where they're the same.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+// ─────────────────────────── Auth & Users ───────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  passwordHash  String
+  name          String?
+  image         String?
+  isSuperAdmin  Boolean   @default(false) // platform SUPER_ADMIN (§66)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions          Session[]
+  memberships       WorkspaceMember[]
+  verificationCodes VerificationToken[]
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+
+  @@index([email])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  tokenHash    String   @unique // sha256 of the opaque session token; raw token never stored
+  ipAddress    String?
+  userAgent    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  lastActiveAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+enum VerificationPurpose {
+  EMAIL_VERIFY
+  PASSWORD_RESET
+  TEAM_INVITE
+}
+
+model VerificationToken {
+  id        String              @id @default(cuid())
+  userId    String?
+  email     String
+  tokenHash String              @unique
+  purpose   VerificationPurpose
+  expiresAt DateTime
+  consumedAt DateTime?
+  metadata  Json?
+  createdAt DateTime            @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([email, purpose])
+}
+
+// ─────────────────────────── Workspace / Tenancy ───────────────────────────
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+model Workspace {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  primaryUse   String? // onboarding: main use case
+  contentLang  String   @default("tr")
+  targetCountry String  @default("TR")
+  timezone     String   @default("Europe/Istanbul")
+  planId       String?
+  onboardingState Json  @default("{}") // onboarding checklist progress (§6)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deletedAt    DateTime? // soft delete (§76)
+
+  plan            Plan?               @relation(fields: [planId], references: [id])
+  members         WorkspaceMember[]
+  invites         WorkspaceInvite[]
+  projects        Project[]
+  wordpressSites  WordPressSite[]
+  articles        Article[]
+  templates       ContentTemplate[]
+  bulkJobs        BulkJob[]
+  providerConfigs UserProviderCredential[]
+  aiUsage         AIUsage[]
+  creditAccount   CreditAccount?
+  creditTxns      CreditTransaction[]
+  subscription    Subscription?
+  auditLogs       AuditLog[]
+  notifications   Notification[]
+  featureFlags    FeatureFlagOverride[]
+
+  @@index([slug])
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(VIEWER)
+  createdAt   DateTime      @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@index([workspaceId])
+}
+
+model WorkspaceInvite {
+  id          String        @id @default(cuid())
+  workspaceId String
+  email       String
+  role        WorkspaceRole @default(EDITOR)
+  tokenHash   String        @unique
+  invitedById String?
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime      @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([email])
+}
+
+// ─────────────────────────── Projects & Voice ───────────────────────────
+
+model Project {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  name           String
+  description    String?
+  wordpressSiteId String?
+  language       String   @default("tr")
+  targetCountry  String   @default("TR")
+  targetAudience String?
+  niche          String?
+  isYMYL         Boolean  @default(false) // §28, §120
+  autoPublishYMYL Boolean @default(false) // must be explicit (§120)
+  preferredProvider String? // e.g. "mock" | "openai" | "anthropic" | "gemini"
+  preferredModelId  String?
+  fallbackModelId   String?
+  defaultAuthorId   String? // WordPressAuthor.id
+  defaultCategoryId String? // WordPressCategory.id
+  defaultPublishMode String @default("LOCAL_DRAFT")
+  customInstructions String? // §22 — user instructions, injected below system rules (§114)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  wordpressSite WordPressSite? @relation(fields: [wordpressSiteId], references: [id])
+  writingProfile WritingProfile?
+  articles      Article[]
+  bulkJobs      BulkJob[]
+
+  @@index([workspaceId])
+  @@index([wordpressSiteId])
+}
+
+model WritingProfile {
+  id            String  @id @default(cuid())
+  projectId     String  @unique
+  brandName     String?
+  aboutSite     String?
+  authorName    String?
+  authorTitle   String?
+  authorBio     String?
+  authorExpertise String?
+  authorProfileUrl String?
+  audience      String?
+  purpose       String?
+  tone          String? // üslup
+  formality     String? // formalite düzeyi
+  addressing    String? // tercih edilen hitap (sen/siz)
+  avoidPhrases  String[] @default([])
+  bannedWords   String[] @default([])
+  preferredTerms String[] @default([])
+  cta           String?
+  sampleTexts   String[] @default([])
+  verifiedFacts String?
+  productInfo   String?
+  disclaimer    String?
+  sourcePolicy  String? // kaynak politikası
+  linkPolicy    String?
+  aiDisclosure  String? // §117 optional AI-assisted disclosure text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model ContentTemplate {
+  id                String  @id @default(cuid())
+  workspaceId       String
+  name              String
+  systemInstruction String?
+  outlineRules      String?
+  headingRules      String?
+  cta               String?
+  tone              String?
+  requiresResearch  Boolean @default(false)
+  requiresFaq       Boolean @default(false)
+  lengthPreference  String  @default("STANDARD")
+  sourcePolicy      String?
+  wordpressDefaults Json    @default("{}")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+// ─────────────────────────── WordPress ───────────────────────────
+
+enum WordPressConnectionMode {
+  PLUGIN // ArticlePilot Connector (HMAC) — preferred
+  APP_PASSWORD // REST API + application password fallback
+}
+
+enum ConnectionHealth {
+  CONNECTED
+  DEGRADED
+  ERROR
+  DISCONNECTED
+}
+
+model WordPressSite {
+  id            String                  @id @default(cuid())
+  workspaceId   String
+  name          String
+  url           String
+  mode          WordPressConnectionMode @default(PLUGIN)
+  health        ConnectionHealth        @default(DISCONNECTED)
+  // Encrypted credential blob (AES-256-GCM). Never returned to the browser (§7, §65).
+  encryptedSecret String?
+  connectionId  String? // per-connection id shared with the plugin (X-ArticlePilot-Key)
+  detectedSeoPlugin String? // rankmath | yoast | aioseo | native
+  wpVersion     String?
+  siteTimezone  String?
+  siteLanguage  String?
+  pluginVersion String?
+  lastSyncAt    DateTime?
+  lastHealthyAt DateTime?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+  deletedAt     DateTime?
+
+  workspace  Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  authors    WordPressAuthor[]
+  categories WordPressCategory[]
+  tags       WordPressTag[]
+  postIndex  WordPressPostIndex[]
+  projects   Project[]
+  articles   Article[]
+  pairing    WordPressPairing?
+
+  @@index([workspaceId])
+  @@index([health])
+}
+
+// One-time pairing token for the plugin handshake (§7, §203).
+model WordPressPairing {
+  id          String   @id @default(cuid())
+  siteId      String   @unique
+  codeHash    String   @unique // sha256 of the short-lived pairing code
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  site WordPressSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+}
+
+model WordPressAuthor {
+  id           String @id @default(cuid())
+  siteId       String
+  externalId   Int // WordPress user id (§207)
+  displayName  String
+  slug         String?
+  email        String?
+
+  site     WordPressSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, externalId])
+  @@index([siteId])
+}
+
+model WordPressCategory {
+  id         String @id @default(cuid())
+  siteId     String
+  externalId Int // §206
+  name       String
+  slug       String?
+  parentId   Int?
+
+  site WordPressSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, externalId])
+  @@index([siteId])
+}
+
+model WordPressTag {
+  id         String @id @default(cuid())
+  siteId     String
+  externalId Int // §208
+  name       String
+  slug       String?
+
+  site WordPressSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, externalId])
+  @@index([siteId])
+}
+
+// Lightweight index of existing WP posts for internal linking & cannibalization (§12, §42).
+model WordPressPostIndex {
+  id           String   @id @default(cuid())
+  siteId       String
+  externalId   Int
+  title        String
+  slug         String?
+  excerpt      String?
+  url          String
+  categoryIds  Int[]    @default([])
+  tagIds       Int[]    @default([])
+  fingerprint  String? // normalized text fingerprint (§40)
+  publishedAt  DateTime?
+  modifiedAt   DateTime?
+  syncedAt     DateTime @default(now())
+
+  site WordPressSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, externalId])
+  @@index([siteId])
+  @@index([slug])
+}
+
+// ─────────────────────────── Articles ───────────────────────────
+
+enum ArticleStatus {
+  LOCAL_DRAFT
+  GENERATING
+  GENERATED
+  EDITING
+  READY
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  WP_DRAFT
+  WP_SCHEDULED
+  WP_PUBLISHED
+  WP_FAILED
+}
+
+enum SearchIntent {
+  INFORMATIONAL
+  COMMERCIAL
+  TRANSACTIONAL
+  NAVIGATIONAL
+  LOCAL
+  MIXED
+}
+
+enum FactReviewStatus {
+  NOT_REQUIRED
+  PASS
+  WARNING
+  REVIEW_REQUIRED
+}
+
+model Article {
+  id            String        @id @default(cuid())
+  workspaceId   String
+  projectId     String?
+  wordpressSiteId String?
+  createdById   String?
+
+  title         String        @default("")
+  slug          String?
+  excerpt       String?
+  contentHtml   String        @default("") // sanitized HTML source of truth (§75, §152)
+  status        ArticleStatus @default(LOCAL_DRAFT)
+
+  // SEO metadata (§45)
+  metaTitle       String?
+  metaDescription String?
+  canonicalUrl    String?
+  focusKeyword    String?
+  searchIntent    SearchIntent?
+  userNeedSummary String? // §24
+  faq             Json?     // [{question, answer}]
+  sources         Json?     // resolved source references (§27, §119)
+
+  // Quality (§37, §39, §120)
+  seoScore        Int?
+  factReviewStatus FactReviewStatus @default(NOT_REQUIRED)
+  qualityWarnings Json?
+
+  // WordPress linkage (§11, §170)
+  wpPostId        Int?
+  wpPermalink     String?
+  wpStatus        String?
+  wpAuthorId      Int?
+  wpCategoryIds   Int[]  @default([])
+  wpTagIds        Int[]  @default([])
+  wpFeaturedMediaId Int?
+  scheduledAt     DateTime? // stored UTC (§103)
+  publishedAt     DateTime?
+  wpModifiedAt    DateTime? // for conflict detection (§130)
+  lastPublishedVersionId String?
+
+  bulkJobItemId String? @unique
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // trash (§169)
+
+  workspace     Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project       Project?        @relation(fields: [projectId], references: [id])
+  wordpressSite WordPressSite?  @relation(fields: [wordpressSiteId], references: [id])
+  versions      ArticleVersion[]
+  keywords      ArticleKeyword[]
+  articleSources ArticleSource[]
+  media         ArticleMedia[]
+  internalLinks InternalLinkSuggestion[] @relation("SourceArticle")
+  generationJobs GenerationJob[]
+  aiUsage       AIUsage[]
+  bulkJobItem   BulkJobItem?    @relation(fields: [bulkJobItemId], references: [id])
+
+  @@index([workspaceId, status])
+  @@index([projectId])
+  @@index([wordpressSiteId])
+  @@index([createdAt])
+  @@index([wpPostId])
+  @@index([scheduledAt])
+}
+
+enum ArticleVersionSource {
+  AI_GENERATION
+  USER_EDIT
+  AI_REWRITE
+  IMPORT
+  WORDPRESS_SYNC
+}
+
+model ArticleVersion {
+  id         String               @id @default(cuid())
+  articleId  String
+  source     ArticleVersionSource
+  title      String
+  contentHtml String
+  metadata   Json?
+  createdById String?
+  createdAt  DateTime             @default(now())
+
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([articleId, createdAt])
+}
+
+enum KeywordKind {
+  PRIMARY
+  SECONDARY
+}
+
+model ArticleKeyword {
+  id        String      @id @default(cuid())
+  articleId String
+  keyword   String
+  kind      KeywordKind @default(SECONDARY)
+
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([articleId])
+}
+
+model ArticleSource {
+  id             String   @id @default(cuid())
+  articleId      String
+  url            String
+  title          String?
+  domain         String?
+  publicationDate DateTime?
+  retrievedAt    DateTime @default(now())
+  relevantExcerpt String?
+  sourceType     String?
+  selected       Boolean  @default(true) // §27 include/exclude
+  credibilityNote String?
+
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([articleId])
+}
+
+model ArticleMedia {
+  id             String  @id @default(cuid())
+  articleId      String
+  role           String  @default("image") // "featured" | "image"
+  storageKey     String?
+  url            String?
+  altText        String?
+  caption        String?
+  source         String?
+  generationPrompt String?
+  wpMediaId      Int?
+  createdAt      DateTime @default(now())
+
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([articleId])
+}
+
+model InternalLinkSuggestion {
+  id                String  @id @default(cuid())
+  sourceArticleId   String
+  targetPostId      Int
+  targetUrl         String
+  targetTitle       String
+  suggestedAnchor   String
+  context           String?
+  confidence        Float   @default(0)
+  accepted          Boolean @default(false)
+  createdAt         DateTime @default(now())
+
+  sourceArticle Article @relation("SourceArticle", fields: [sourceArticleId], references: [id], onDelete: Cascade)
+
+  @@index([sourceArticleId])
+}
+
+// ─────────────────────────── Generation & AI ───────────────────────────
+
+enum GenerationJobType {
+  RESEARCH
+  BRIEF
+  OUTLINE
+  DRAFT
+  SEO_REVIEW
+  FACT_REVIEW
+  REWRITE
+  META
+  INTERNAL_LINK
+  TITLE
+}
+
+enum GenerationJobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model GenerationJob {
+  id            String              @id @default(cuid())
+  workspaceId   String
+  articleId     String?
+  bulkJobItemId String?
+  type          GenerationJobType
+  provider      String
+  modelId       String
+  promptVersion String?
+  status        GenerationJobStatus @default(PENDING)
+  attempt       Int                 @default(0)
+  error         String?
+  errorCode     String?
+  queueJobId    String?
+  input         Json?
+  output        Json?
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  createdAt     DateTime            @default(now())
+
+  article Article? @relation(fields: [articleId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([articleId])
+  @@index([status])
+}
+
+// Provider on/off + platform-managed key presence (admin managed) (§66).
+model AIProviderConfig {
+  id        String  @id @default(cuid())
+  provider  String  @unique // mock | openai | anthropic | gemini
+  displayName String
+  active    Boolean @default(true)
+  concurrency Int   @default(4) // §49 per-provider concurrency
+  health    String  @default("unknown")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  models AIModel[]
+}
+
+enum QualityTier {
+  ECONOMY
+  BALANCED
+  PREMIUM
+}
+
+enum SpeedTier {
+  SLOW
+  MEDIUM
+  FAST
+}
+
+model AIModel {
+  id                   String  @id @default(cuid())
+  provider             String
+  externalModelId      String // the id passed to the provider API
+  displayName          String
+  description          String?
+  active               Boolean @default(true)
+  supportsStreaming    Boolean @default(false)
+  supportsStructured   Boolean @default(true)
+  supportsVision       Boolean @default(false)
+  supportsWebSearch    Boolean @default(false)
+  contextWindow        Int     @default(128000)
+  maxOutputTokens      Int     @default(8192)
+  // Prices in USD micro-units per 1M tokens (integer, precision-safe) (§160, §161).
+  inputPricePerMTok    Int     @default(0)
+  outputPricePerMTok   Int     @default(0)
+  currency             String  @default("USD")
+  defaultForArticle    Boolean @default(false)
+  defaultForResearch   Boolean @default(false)
+  qualityTier          QualityTier @default(BALANCED)
+  speedTier            SpeedTier   @default(MEDIUM)
+  sortOrder            Int     @default(0)
+  deprecated           Boolean @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  providerConfig AIProviderConfig? @relation(fields: [provider], references: [provider])
+
+  @@unique([provider, externalModelId])
+  @@index([provider])
+}
+
+// BYOK — encrypted, server-only (§17, §198).
+model UserProviderCredential {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  provider       String
+  label          String?
+  encryptedKey   String // AES-256-GCM
+  keyLast4       String // for masked display "sk-••••1234"
+  active         Boolean  @default(true)
+  lastValidatedAt DateTime?
+  createdAt      DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, provider])
+  @@index([workspaceId])
+}
+
+enum UsageStatus {
+  SUCCESS
+  FAILED
+}
+
+model AIUsage {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  userId           String?
+  articleId        String?
+  generationJobId  String?
+  provider         String
+  modelId          String
+  modelDisplayName String // snapshot (§215)
+  inputTokens      Int      @default(0)
+  cachedInputTokens Int     @default(0)
+  outputTokens     Int      @default(0)
+  reasoningTokens  Int      @default(0)
+  // Snapshot of provider cost at generation time, in USD micro-units (§162).
+  estimatedProviderCostMicro Int @default(0)
+  chargedCredits   Int      @default(0)
+  status           UsageStatus @default(SUCCESS)
+  errorCode        String?
+  durationMs       Int      @default(0)
+  startedAt        DateTime @default(now())
+  completedAt      DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  article   Article?  @relation(fields: [articleId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([provider, modelId])
+  @@index([startedAt])
+}
+
+// ─────────────────────────── Credits & Billing ───────────────────────────
+
+model CreditAccount {
+  id          String   @id @default(cuid())
+  workspaceId String   @unique
+  balance     Int      @default(0) // credits (integer, never float) (§160)
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+enum CreditTxnType {
+  PURCHASE
+  MONTHLY_GRANT
+  GENERATION
+  REFUND
+  ADMIN_ADJUSTMENT
+  BONUS
+  EXPIRATION
+}
+
+model CreditTransaction {
+  id              String        @id @default(cuid())
+  workspaceId     String
+  type            CreditTxnType
+  amount          Int // signed: positive credit, negative debit
+  balanceAfter    Int
+  description     String?
+  generationJobId String?
+  // Idempotency key: a retried queue job must not double-charge (§19, §81).
+  idempotencyKey  String?       @unique
+  createdAt       DateTime      @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+}
+
+model Plan {
+  id          String  @id @default(cuid())
+  key         String  @unique // FREE | STARTER | PRO | AGENCY | ENTERPRISE
+  name        String
+  description String?
+  priceMinor  Int     @default(0) // price in currency minor units (§160)
+  currency    String  @default("TRY")
+  interval    String  @default("month")
+  monthlyCredits Int  @default(0)
+  active      Boolean @default(true)
+  sortOrder   Int     @default(0)
+
+  features      PlanFeature[]
+  workspaces    Workspace[]
+  subscriptions Subscription[]
+}
+
+// Feature entitlements resolved via a service, not hard-coded ifs (§67).
+model PlanFeature {
+  id      String @id @default(cuid())
+  planId  String
+  key     String // maxProjects | maxSites | maxTeamMembers | bulkGeneration | maxBulkRows | premiumModels | byok | advancedResearch | contentCalendar | priorityQueue | approvalWorkflow
+  value   String // stringified; parsed by entitlement service (bool/int)
+
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, key])
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  TRIALING
+  INCOMPLETE
+}
+
+model Subscription {
+  id           String             @id @default(cuid())
+  workspaceId  String             @unique
+  planId       String
+  status       SubscriptionStatus @default(ACTIVE)
+  provider     String             @default("mock") // iyzico | paytr | stripe | mock (§68)
+  externalId   String?
+  currentPeriodEnd DateTime?
+  cancelAtPeriodEnd Boolean       @default(false)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plan      Plan      @relation(fields: [planId], references: [id])
+}
+
+// ─────────────────────────── Bulk ───────────────────────────
+
+enum BulkJobStatus {
+  PENDING
+  RUNNING
+  PAUSED
+  COMPLETED
+  PARTIALLY_COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum BulkItemStatus {
+  QUEUED
+  RESEARCHING
+  GENERATING
+  REVIEWING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model BulkJob {
+  id            String        @id @default(cuid())
+  workspaceId   String
+  projectId     String?
+  createdById   String?
+  name          String
+  status        BulkJobStatus @default(PENDING)
+  provider      String
+  modelId       String
+  publishMode   String        @default("LOCAL_DRAFT")
+  scheduleConfig Json?        // auto-schedule distribution (§53)
+  totalItems    Int           @default(0)
+  completedItems Int          @default(0)
+  failedItems   Int           @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project?      @relation(fields: [projectId], references: [id])
+  items     BulkJobItem[]
+
+  @@index([workspaceId, status])
+}
+
+model BulkJobItem {
+  id          String         @id @default(cuid())
+  bulkJobId   String
+  position    Int
+  topic       String
+  primaryKeyword String?
+  secondaryKeywords String[] @default([])
+  categoryExternalId Int?
+  authorExternalId   Int?
+  publishMode String?
+  publishAt   DateTime?
+  customInstruction String?
+  status      BulkItemStatus @default(QUEUED)
+  error       String?
+  // Idempotency: dedupe on retry so a successful item isn't regenerated (§52, §81).
+  idempotencyKey String     @unique
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  bulkJob BulkJob  @relation(fields: [bulkJobId], references: [id], onDelete: Cascade)
+  article Article?
+
+  @@index([bulkJobId, status])
+}
+
+// ─────────────────────────── Platform / Ops ───────────────────────────
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  workspaceId String?
+  actorUserId String?
+  action      String // SITE_CONNECTED | ARTICLE_PUBLISHED | API_KEY_ADDED ...
+  targetType  String?
+  targetId    String?
+  metadata    Json?
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  actor     User?      @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([action])
+}
+
+model WebhookEvent {
+  id          String   @id @default(cuid())
+  source      String // billing | wordpress
+  eventType   String
+  externalId  String? // provider event id for idempotency (§69)
+  signatureOk Boolean  @default(false)
+  processedAt DateTime?
+  payload     Json
+  createdAt   DateTime @default(now())
+
+  @@unique([source, externalId])
+  @@index([source, eventType])
+}
+
+model FeatureFlag {
+  id          String   @id @default(cuid())
+  key         String   @unique // DEEP_RESEARCH | TOPIC_MAP | CONTENT_REFRESH
+  description String?
+  enabled     Boolean  @default(false) // global default
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  overrides FeatureFlagOverride[]
+}
+
+model FeatureFlagOverride {
+  id          String  @id @default(cuid())
+  flagId      String
+  workspaceId String
+  enabled     Boolean
+
+  flag      FeatureFlag @relation(fields: [flagId], references: [id], onDelete: Cascade)
+  workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([flagId, workspaceId])
+}
+
+model PromptTemplate {
+  id          String   @id @default(cuid())
+  key         String   @unique // ARTICLE_BRIEF | ARTICLE_OUTLINE | ...
+  description String?
+  createdAt   DateTime @default(now())
+
+  versions PromptVersion[]
+}
+
+model PromptVersion {
+  id            String   @id @default(cuid())
+  templateId    String
+  version       Int
+  system        String
+  userTemplate  String
+  active        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  template PromptTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, version])
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String?
+  type        String // BULK_COMPLETED | WP_PUBLISH_FAILED | SITE_DISCONNECTED | PLAN_LIMIT | REVIEW_PENDING
+  title       String
+  body        String?
+  readAt      DateTime?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, userId])
+}

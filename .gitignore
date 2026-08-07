@@ -1,17 +1,43 @@
+# dependencies
+node_modules
+.pnpm-store
+
+# next
+.next
+out
+next-env.d.ts
+*.tsbuildinfo
+
+# production
+build
+dist
+
+# env
 .env
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.so
-.pytest_cache/
-.venv/
-venv/
-env/
-.idea/
-.vscode/
+.env*.local
+
+# prisma
+prisma/*.db
+
+# redis snapshot (local dev stack)
+dump.rdb
+*.rdb
+
+# storage (local file storage adapter)
+/storage
+
+# testing
+coverage
+playwright-report
+test-results
+
+# misc
 .DS_Store
-output/*.md
-output/*.json
-!output/.gitkeep
+*.log
+.vscode
+.idea
+
+# python legacy
+legacy/**/__pycache__
+legacy/**/*.pyc
+legacy/.venv
