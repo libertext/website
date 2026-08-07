@@ -1,21 +1,39 @@
-.env
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.so
-.pytest_cache/
-.venv/
-venv/
-env/
-.idea/
-.vscode/
-.DS_Store
-output/*.md
-output/*.json
-!output/.gitkeep
+# dependencies
+node_modules
+.pnpm-store
 
-# YouTube OAuth gizli dosyaları — asla commit etme
-content_plan/client_secret.json
-content_plan/token.json
+# next
+.next
+out
+next-env.d.ts
+*.tsbuildinfo
+
+# production
+build
+dist
+
+# env
+.env
+.env*.local
+
+# prisma
+prisma/*.db
+
+# storage (local file storage adapter)
+/storage
+
+# testing
+coverage
+playwright-report
+test-results
+
+# misc
+.DS_Store
+*.log
+.vscode
+.idea
+
+# python legacy
+legacy/**/__pycache__
+legacy/**/*.pyc
+legacy/.venv

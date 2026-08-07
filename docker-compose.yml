@@ -1,0 +1,67 @@
+# Local development infrastructure (§3). Web and worker run on the host via
+# `pnpm dev` / `pnpm dev:worker`; this file provides Postgres + Redis.
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: articlepilot
+      POSTGRES_PASSWORD: articlepilot
+      POSTGRES_DB: articlepilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U articlepilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"] # persistence for durable queues (§233)
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Optional WordPress test stack — `docker compose --profile wordpress up` (§134).
+  wordpress:
+    image: wordpress:php8.2-apache
+    profiles: ["wordpress"]
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      WORDPRESS_DB_HOST: wpdb
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_NAME: wordpress
+    volumes:
+      - ./wordpress-plugin/articlepilot-connector:/var/www/html/wp-content/plugins/articlepilot-connector
+    depends_on:
+      - wpdb
+
+  wpdb:
+    image: mysql:8
+    profiles: ["wordpress"]
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: wordpress
+      MYSQL_RANDOM_ROOT_PASSWORD: "1"
+    volumes:
+      - wpdata:/var/lib/mysql
+
+volumes:
+  pgdata:
+  redisdata:
+  wpdata:
