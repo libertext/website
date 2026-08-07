@@ -55,6 +55,7 @@ export const ArticleService = {
       wordpressSiteId?: string;
       createdById?: string;
       focusKeyword?: string;
+      status?: ArticleStatus;
     },
   ) {
     return prisma.article.create({
@@ -65,7 +66,9 @@ export const ArticleService = {
         wordpressSiteId: data.wordpressSiteId,
         createdById: data.createdById,
         focusKeyword: data.focusKeyword,
-        status: "LOCAL_DRAFT",
+        // Mark GENERATING up-front when a generation is about to be dispatched so the
+        // editor shows the progress view immediately — no empty-content flash (§62).
+        status: data.status ?? "LOCAL_DRAFT",
       },
     });
   },

@@ -55,6 +55,7 @@ export async function createArticleAction(formData: FormData): Promise<void> {
     wordpressSiteId: project?.wordpressSiteId ?? undefined,
     createdById: user.id,
     focusKeyword: parsed.data.primaryKeyword,
+    status: "GENERATING", // show the progress view instantly (§62)
   });
 
   await dispatchGeneration({

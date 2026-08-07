@@ -103,8 +103,11 @@ export class MockAIProvider implements AIProvider {
   private topicFrom(opts: GenerateOptions): string {
     const lastUser = [...opts.messages].reverse().find((m) => m.role === "user");
     const raw = lastUser?.content ?? "Örnek Konu";
-    // Grab a topic-ish line: first non-empty line, trimmed to a sentence.
-    const line = raw.split("\n").map((l) => l.trim()).find(Boolean) ?? raw;
+    const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
+    // The prompt engine emits a "Konu: <topic>" line — prefer it so the mock echoes
+    // the real topic, not the task instruction.
+    const konuLine = lines.find((l) => /^(konu|topic)\s*[:：]/i.test(l));
+    const line = konuLine ?? lines[0] ?? raw;
     return line.replace(/^(konu|topic)\s*[:：]/i, "").trim().slice(0, 120) || "Örnek Konu";
   }
 
