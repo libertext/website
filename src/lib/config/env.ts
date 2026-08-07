@@ -8,10 +8,12 @@ const serverSchema = z.object({
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().default("redis://localhost:6379"),
   AUTH_SECRET: z.string().min(16, "AUTH_SECRET must be at least 16 chars"),
-  // 64 hex chars = 32 bytes for AES-256-GCM master key.
+  // AES-256-GCM master key. Either a 64-hex string (recommended: openssl rand -hex 32)
+  // or any high-entropy secret of 32+ chars (derived via SHA-256) so a hosting
+  // platform can auto-generate it. See src/lib/crypto/encryption.ts.
   APP_ENCRYPTION_KEY: z
     .string()
-    .regex(/^[0-9a-fA-F]{64}$/, "APP_ENCRYPTION_KEY must be 64 hex chars (32 bytes)"),
+    .min(32, "APP_ENCRYPTION_KEY must be at least 32 characters (or 64 hex chars)"),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 
   // Optional AI provider keys — platform-managed BYOK fallback. Absent = provider disabled.

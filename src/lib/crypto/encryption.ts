@@ -3,15 +3,21 @@ import { getEnv } from "@/lib/config/env";
 
 /**
  * Authenticated encryption for secrets at rest — AES-256-GCM (§7).
- * Master key from APP_ENCRYPTION_KEY (32 bytes hex). Losing it makes stored
- * credentials unrecoverable — back it up (§108).
+ * Losing APP_ENCRYPTION_KEY makes stored credentials unrecoverable — back it up (§108).
+ *
+ * The master key accepts either form so hosting platforms can auto-generate it:
+ *   - a 64-hex string → used directly as 32 raw bytes (explicit, recommended)
+ *   - any other secret string → SHA-256 derived to 32 bytes (KDF-lite)
  *
  * Serialized format: v1:<iv_hex>:<tag_hex>:<ciphertext_hex>
  */
 const VERSION = "v1";
 
 function masterKey(): Buffer {
-  return Buffer.from(getEnv().APP_ENCRYPTION_KEY, "hex");
+  const raw = getEnv().APP_ENCRYPTION_KEY;
+  if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, "hex");
+  // Derive a 32-byte key from a high-entropy secret (e.g. a platform-generated value).
+  return createHash("sha256").update(raw, "utf8").digest();
 }
 
 export function encryptSecret(plaintext: string): string {
