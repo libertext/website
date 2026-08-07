@@ -8,7 +8,11 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Runtime queries use the (pooled) DATABASE_URL. Migrations use directUrl — a
+  // non-pooled connection — required by managed Postgres like Neon (§DEPLOYMENT).
+  // directUrl falls back to DATABASE_URL locally where they're the same.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 // ─────────────────────────── Auth & Users ───────────────────────────
