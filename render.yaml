@@ -25,7 +25,7 @@ services:
   - type: web
     name: articlepilot
     runtime: node
-    plan: starter # "free" also works but spins down when idle
+    plan: free # $0, no card required; spins down when idle (upgrade to "starter" for always-on)
     region: frankfurt # move closer to your users if needed
     buildCommand: "corepack enable && pnpm install --frozen-lockfile && pnpm build"
     # Migrate + (idempotent) seed on every boot, then start. Guarantees the DB is
